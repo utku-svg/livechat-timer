@@ -21,49 +21,71 @@
       box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
     .timer-title {
-      font-size: 12px;
-      font-weight: 600;
+      font-size: 11px;
+      font-weight: 700;
       color: #6d7986;
       text-transform: uppercase;
       margin-bottom: 6px;
+      letter-spacing: 0.5px;
     }
     .timer-display {
-      font-size: 32px;
-      font-weight: 700;
-      color: #2b3a4a;
+      font-size: 34px;
+      font-weight: 800;
       letter-spacing: 1px;
+      transition: color 0.3s ease;
     }
-    .status-ok { color: #108447; }
-    .status-warn { color: #d07000; }
-    .status-alert { color: #d62400; animation: blink 1s infinite alternate; }
-    @keyframes blink { from { opacity: 1; } to { opacity: 0.5; } }
+    /* Renk Durumları */
+    .status-normal { color: #2b3a4a; }
+    .status-green  { color: #108447; } /* 1. dk */
+    .status-yellow { color: #d07000; } /* 2. dk */
+    .status-red    { color: #d62400; } /* 2.5 dk (150 sn) */
+    .status-alarm  { 
+      color: #d62400; 
+      animation: blink 0.7s infinite alternate; 
+    } /* 2 dk 45 sn (165 sn) */
+
+    @keyframes blink { 
+      from { opacity: 1; transform: scale(1); } 
+      to { opacity: 0.4; transform: scale(1.03); } 
+    }
+
     .btn-reset {
-      margin-top: 10px;
-      padding: 6px 12px;
+      margin-top: 12px;
+      padding: 8px 14px;
       font-size: 12px;
-      border-radius: 4px;
+      font-weight: 600;
+      border-radius: 6px;
       border: none;
       background: #4384f5;
       color: white;
       cursor: pointer;
+      width: 100%;
+    }
+    .btn-reset:hover {
+      background: #2f6fd4;
     }
   </style>
 </head>
 <body>
 
   <div class="card">
-    <div class="timer-title">Son Müşteri Yanıtından Beri</div>
-    <div id="display" class="timer-display status-ok">00:00</div>
+    <div class="timer-title">Müşteri Yanıt Sayacı</div>
+    <div id="display" class="timer-display status-normal">00:00</div>
     <button class="btn-reset" id="resetBtn">Sayacı Sıfırla (Cevaplandı)</button>
   </div>
 
   <script>
-    // === AYARLAR ===
-    const WARNING_SECONDS = 60;  // 1. dakika sarı uyarı
-    const ALERT_SECONDS = 120;   // 2. dakika sesli kırmızı alarm
-    const ALARM_SOUND = 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg';
+    // ================= SÜRE AYARLARI (Saniye Cinsinden) =================
+    const TIME_GREEN  = 60;   // 1. dakika (Yeşil)
+    const TIME_YELLOW = 120;  // 2. dakika (Sarı)
+    const TIME_RED    = 150;  // 2.5 dakika (Kırmızı)
+    const TIME_ALARM  = 165;  // 2 dakika 45 saniye (Kırmızı Yanıp Sönme + Sesli Alarm)
+    const TOTAL_LIMIT = 180;  // 3 dakika (Maksimum Hedef Süre)
 
+    // Alarm Sesi
+    const ALARM_SOUND = 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg';
     const audio = new Audio(ALARM_SOUND);
+
     let secondsElapsed = 0;
     let timerInterval = null;
     let currentChatId = null;
@@ -79,16 +101,32 @@
 
     function updateDisplay() {
       display.textContent = formatTime(secondsElapsed);
-      if (secondsElapsed >= ALERT_SECONDS) {
-        display.className = 'timer-display status-alert';
-        // Her 20 saniyede bir sesi tekrar çal
-        if (secondsElapsed % 20 === 0) {
-          audio.play().catch(e => console.log('Audio engeli:', e));
+
+      // 2 dk 45 sn ve sonrası: Sesli Alarm + Yanıp Sönen Kırmızı
+      if (secondsElapsed >= TIME_ALARM) {
+        display.className = 'timer-display status-alarm';
+        
+        // 165. saniyede ilk alarmı çal, ardından süre dolana kadar her 5 saniyede bir tekrarla
+        if (secondsElapsed === TIME_ALARM || (secondsElapsed > TIME_ALARM && (secondsElapsed - TIME_ALARM) % 5 === 0)) {
+          audio.currentTime = 0;
+          audio.play().catch(e => console.log('Otomatik ses engeli:', e));
         }
-      } else if (secondsElapsed >= WARNING_SECONDS) {
-        display.className = 'timer-display status-warn';
-      } else {
-        display.className = 'timer-display status-ok';
+      } 
+      // 2.5 dakika (150 sn) - 2 dk 45 sn arası: Sabit Kırmızı
+      else if (secondsElapsed >= TIME_RED) {
+        display.className = 'timer-display status-red';
+      } 
+      // 2. dakika (120 sn) - 2.5 dk arası: Sarı
+      else if (secondsElapsed >= TIME_YELLOW) {
+        display.className = 'timer-display status-yellow';
+      } 
+      // 1. dakika (60 sn) - 2. dk arası: Yeşil
+      else if (secondsElapsed >= TIME_GREEN) {
+        display.className = 'timer-display status-green';
+      } 
+      // İlk 1 dakika: Normal renk
+      else {
+        display.className = 'timer-display status-normal';
       }
     }
 
@@ -110,23 +148,26 @@
       startTimer();
     });
 
-    // Sayfaya tıklandığında ses kilidini aç
+    // Tarayıcı ses kilidini kaldırmak için sayfaya ilk tıklandığında sesi hazırlar
     document.addEventListener('click', () => audio.load(), { once: true });
 
     // LiveChat SDK Başlatma
-    LiveChat.createDetailsWidget().then(widget => {
-      // Temsilci yeni bir sohbet sekmesine geçtiğinde tetiklenir
-      widget.on('customer_profile', data => {
-        if (data && data.chat && data.chat.id !== currentChatId) {
-          currentChatId = data.chat.id;
-          startTimer();
-        }
+    if (window.LiveChat) {
+      LiveChat.createDetailsWidget().then(widget => {
+        // Temsilci başka bir sohbete geçtiğinde sayaç baştan başlar
+        widget.on('customer_profile', data => {
+          if (data && data.chat && data.chat.id !== currentChatId) {
+            currentChatId = data.chat.id;
+            startTimer();
+          }
+        });
+      }).catch(err => {
+        console.log('SDK yüklenemedi, test modunda çalışıyor:', err);
+        startTimer();
       });
-    }).catch(err => {
-      // SDK dışında yerel tarayıcı testleri için fallback
-      console.log('SDK başlatılamadı veya panel dışında çalışıyor:', err);
+    } else {
       startTimer();
-    });
+    }
   </script>
 </body>
 </html>
