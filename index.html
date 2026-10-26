@@ -2,96 +2,131 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <title>LiveChat Response Timer</title>
-  <!-- LiveChat Agent App SDK v2 -->
+  <title>LiveChat Multi-Chat Timer</title>
   <script src="https://unpkg.com/@livechat/agent-app-sdk@2.3.0/dist/agent-app-sdk.min.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      padding: 16px;
+      padding: 10px;
       margin: 0;
-      background: #fafafa;
+      background: #f8fafc;
+      color: #1e293b;
     }
-    .card {
-      background: #ffffff;
-      border: 1px solid #e4e7eb;
-      border-radius: 8px;
-      padding: 14px;
-      text-align: center;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-    .timer-title {
+    .header-bar {
       font-size: 11px;
       font-weight: 700;
-      color: #6d7986;
       text-transform: uppercase;
-      margin-bottom: 6px;
-      letter-spacing: 0.5px;
+      color: #64748b;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 4px;
     }
-    .timer-display {
-      font-size: 34px;
+    .chat-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .chat-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      transition: all 0.2s ease;
+    }
+    .chat-card.active-chat {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 1px #3b82f6;
+      background: #f0f7ff;
+    }
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .customer-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 140px;
+    }
+    .timer-badge {
+      font-size: 14px;
       font-weight: 800;
-      letter-spacing: 1px;
-      transition: color 0.3s ease;
+      padding: 3px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+      font-variant-numeric: tabular-nums;
     }
     /* Renk Durumları */
-    .status-normal { color: #2b3a4a; }
-    .status-green  { color: #108447; } /* 1. dk */
-    .status-yellow { color: #d07000; } /* 2. dk */
-    .status-red    { color: #d62400; } /* 2.5 dk (150 sn) */
-    .status-alarm  { 
-      color: #d62400; 
-      animation: blink 0.7s infinite alternate; 
-    } /* 2 dk 45 sn (165 sn) */
+    .st-normal { background: #f1f5f9; color: #475569; }
+    .st-green  { background: #dcfce7; color: #15803d; } /* 1. dk */
+    .st-yellow { background: #fef3c7; color: #b45309; } /* 2. dk */
+    .st-red    { background: #fee2e2; color: #b91c1c; } /* 2.5 dk (150 sn) */
+    .st-alarm  { 
+      background: #dc2626; 
+      color: #ffffff; 
+      animation: pulse 0.7s infinite alternate; 
+    }
+    .st-closing-wait  { background: #e0f2fe; color: #0369a1; }
+    .st-closing-ready { background: #fef08a; color: #854d0e; font-weight: 900; }
 
-    @keyframes blink { 
-      from { opacity: 1; transform: scale(1); } 
-      to { opacity: 0.4; transform: scale(1.03); } 
+    @keyframes pulse {
+      from { transform: scale(1); opacity: 1; }
+      to { transform: scale(1.04); opacity: 0.7; }
     }
 
-    .btn-reset {
-      margin-top: 12px;
-      padding: 8px 14px;
-      font-size: 12px;
+    .card-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    button {
+      flex: 1;
+      padding: 5px 8px;
+      font-size: 11px;
       font-weight: 600;
-      border-radius: 6px;
       border: none;
-      background: #4384f5;
-      color: white;
+      border-radius: 5px;
       cursor: pointer;
-      width: 100%;
+      transition: opacity 0.15s;
     }
-    .btn-reset:hover {
-      background: #2f6fd4;
+    button:hover { opacity: 0.85; }
+    .btn-reset { background: #3b82f6; color: #fff; }
+    .btn-close { background: #8b5cf6; color: #fff; }
+    .btn-cancel { background: #64748b; color: #fff; }
+    .empty-state {
+      text-align: center;
+      padding: 24px 10px;
+      font-size: 12px;
+      color: #94a3b8;
     }
   </style>
 </head>
 <body>
 
-  <div class="card">
-    <div class="timer-title">Müşteri Yanıt Sayacı</div>
-    <div id="display" class="timer-display status-normal">00:00</div>
-    <button class="btn-reset" id="resetBtn">Sayacı Sıfırla (Cevaplandı)</button>
+  <div class="header-bar">
+    <span>Canlı Sohbet Takibi</span>
+    <span id="activeCount">0 Aktif</span>
+  </div>
+
+  <div id="chatList" class="chat-list">
+    <div class="empty-state">Henüz açık bir sohbet seçilmedi...</div>
   </div>
 
   <script>
-    // ================= SÜRE AYARLARI (Saniye Cinsinden) =================
-    const TIME_GREEN  = 60;   // 1. dakika (Yeşil)
-    const TIME_YELLOW = 120;  // 2. dakika (Sarı)
-    const TIME_RED    = 150;  // 2.5 dakika (Kırmızı)
-    const TIME_ALARM  = 165;  // 2 dakika 45 saniye (Kırmızı Yanıp Sönme + Sesli Alarm)
-    const TOTAL_LIMIT = 180;  // 3 dakika (Maksimum Hedef Süre)
-
-    // Alarm Sesi
     const ALARM_SOUND = 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg';
     const audio = new Audio(ALARM_SOUND);
+    document.addEventListener('click', () => audio.load(), { once: true });
 
-    let secondsElapsed = 0;
-    let timerInterval = null;
-    let currentChatId = null;
-
-    const display = document.getElementById('display');
-    const resetBtn = document.getElementById('resetBtn');
+    const chats = {}; // { [chatId]: { name, seconds, mode, closingSec, lastUpdated } }
+    let currentActiveChatId = null;
 
     function formatTime(s) {
       const min = Math.floor(s / 60).toString().padStart(2, '0');
@@ -99,74 +134,163 @@
       return `${min}:${sec}`;
     }
 
-    function updateDisplay() {
-      display.textContent = formatTime(secondsElapsed);
+    function renderCards() {
+      const listEl = document.getElementById('chatList');
+      const countEl = document.getElementById('activeCount');
+      const chatIds = Object.keys(chats);
 
-      // 2 dk 45 sn ve sonrası: Sesli Alarm + Yanıp Sönen Kırmızı
-      if (secondsElapsed >= TIME_ALARM) {
-        display.className = 'timer-display status-alarm';
-        
-        // 165. saniyede ilk alarmı çal, ardından süre dolana kadar her 5 saniyede bir tekrarla
-        if (secondsElapsed === TIME_ALARM || (secondsElapsed > TIME_ALARM && (secondsElapsed - TIME_ALARM) % 5 === 0)) {
-          audio.currentTime = 0;
-          audio.play().catch(e => console.log('Otomatik ses engeli:', e));
-        }
-      } 
-      // 2.5 dakika (150 sn) - 2 dk 45 sn arası: Sabit Kırmızı
-      else if (secondsElapsed >= TIME_RED) {
-        display.className = 'timer-display status-red';
-      } 
-      // 2. dakika (120 sn) - 2.5 dk arası: Sarı
-      else if (secondsElapsed >= TIME_YELLOW) {
-        display.className = 'timer-display status-yellow';
-      } 
-      // 1. dakika (60 sn) - 2. dk arası: Yeşil
-      else if (secondsElapsed >= TIME_GREEN) {
-        display.className = 'timer-display status-green';
-      } 
-      // İlk 1 dakika: Normal renk
-      else {
-        display.className = 'timer-display status-normal';
+      countEl.textContent = `${chatIds.length} Chat`;
+
+      if (chatIds.length === 0) {
+        listEl.innerHTML = '<div class="empty-state">Henüz açık bir sohbet seçilmedi...</div>';
+        return;
       }
+
+      listEl.innerHTML = '';
+
+      chatIds.forEach(id => {
+        const item = chats[id];
+        const card = document.createElement('div');
+        card.className = `chat-card ${id === currentActiveChatId ? 'active-chat' : ''}`;
+
+        const top = document.createElement('div');
+        top.className = 'card-top';
+
+        const name = document.createElement('div');
+        name.className = 'customer-name';
+        name.textContent = item.name || 'Müşteri';
+
+        const badge = document.createElement('div');
+        badge.className = 'timer-badge';
+
+        if (item.mode === 'closing') {
+          badge.textContent = `K: ${item.closingSec}s`;
+          if (item.closingSec < 60) {
+            badge.classList.add('st-closing-wait');
+            badge.title = `Bekleyin: Kapatmaya ${60 - item.closingSec} sn var`;
+          } else if (item.closingSec >= 60 && item.closingSec < 120) {
+            badge.classList.add('st-closing-ready');
+            badge.title = 'Kapatılabilir!';
+          } else {
+            badge.classList.add('st-alarm');
+            badge.title = '120 sn aşıldı!';
+          }
+        } else {
+          badge.textContent = formatTime(item.seconds);
+          const s = item.seconds;
+          if (s >= 165) {
+            badge.classList.add('st-alarm');
+          } else if (s >= 150) {
+            badge.classList.add('st-red');
+          } else if (s >= 120) {
+            badge.classList.add('st-yellow');
+          } else if (s >= 60) {
+            badge.classList.add('st-green');
+          } else {
+            badge.classList.add('st-normal');
+          }
+        }
+
+        top.appendChild(name);
+        top.appendChild(badge);
+
+        const actions = document.createElement('div');
+        actions.className = 'card-actions';
+
+        const resetBtn = document.createElement('button');
+        resetBtn.className = 'btn-reset';
+        resetBtn.textContent = 'Yenile';
+        resetBtn.onclick = () => {
+          item.seconds = 0;
+          item.mode = 'normal';
+          renderCards();
+        };
+
+        const closeBtn = document.createElement('button');
+        if (item.mode === 'closing') {
+          closeBtn.className = 'btn-cancel';
+          closeBtn.textContent = 'İptal';
+          closeBtn.onclick = () => {
+            item.mode = 'normal';
+            renderCards();
+          };
+        } else {
+          closeBtn.className = 'btn-close';
+          closeBtn.textContent = 'Kapat (60s)';
+          closeBtn.onclick = () => {
+            item.mode = 'closing';
+            item.closingSec = 0;
+            renderCards();
+          };
+        }
+
+        actions.appendChild(resetBtn);
+        actions.appendChild(closeBtn);
+
+        card.appendChild(top);
+        card.appendChild(actions);
+        listEl.appendChild(card);
+      });
     }
 
-    function startTimer() {
-      stopTimer();
-      secondsElapsed = 0;
-      updateDisplay();
-      timerInterval = setInterval(() => {
-        secondsElapsed++;
-        updateDisplay();
-      }, 1000);
-    }
+    // 1 saniyelik ana döngü
+    setInterval(() => {
+      Object.keys(chats).forEach(id => {
+        const item = chats[id];
+        if (item.mode === 'closing') {
+          item.closingSec++;
+          if (item.closingSec === 60) {
+            audio.currentTime = 0;
+            audio.play().catch(() => {});
+          }
+          if (item.closingSec >= 120 && item.closingSec % 5 === 0) {
+            audio.currentTime = 0;
+            audio.play().catch(() => {});
+          }
+        } else {
+          item.seconds++;
+          if (item.seconds === 165 || (item.seconds > 165 && (item.seconds - 165) % 5 === 0)) {
+            audio.currentTime = 0;
+            audio.play().catch(() => {});
+          }
+        }
+      });
+      renderCards();
+    }, 1000);
 
-    function stopTimer() {
-      if (timerInterval) clearInterval(timerInterval);
-    }
-
-    resetBtn.addEventListener('click', () => {
-      startTimer();
-    });
-
-    // Tarayıcı ses kilidini kaldırmak için sayfaya ilk tıklandığında sesi hazırlar
-    document.addEventListener('click', () => audio.load(), { once: true });
-
-    // LiveChat SDK Başlatma
+    // LiveChat SDK Entegrasyonu
     if (window.LiveChat) {
       LiveChat.createDetailsWidget().then(widget => {
-        // Temsilci başka bir sohbete geçtiğinde sayaç baştan başlar
+        // Temsilci sohbete tıkladığında veya yeni sohbet açıldığında
         widget.on('customer_profile', data => {
-          if (data && data.chat && data.chat.id !== currentChatId) {
-            currentChatId = data.chat.id;
-            startTimer();
+          if (data && data.chat && data.chat.id) {
+            const chatId = data.chat.id;
+            currentActiveChatId = chatId;
+
+            if (!chats[chatId]) {
+              const customerName = (data.customer && data.customer.name) ? data.customer.name : 'Müşteri';
+              chats[chatId] = {
+                name: customerName,
+                seconds: 0,
+                mode: 'normal',
+                closingSec: 0
+              };
+            }
+            renderCards();
+          }
+        });
+
+        // Temsilci mesaj gönderdiğinde süreyi otomatik sıfırla
+        widget.on('new_event', event => {
+          if (event && event.author_type === 'agent' && currentActiveChatId && chats[currentActiveChatId]) {
+            chats[currentActiveChatId].seconds = 0;
+            chats[currentActiveChatId].mode = 'normal';
+            renderCards();
           }
         });
       }).catch(err => {
-        console.log('SDK yüklenemedi, test modunda çalışıyor:', err);
-        startTimer();
+        console.log('SDK başlatılamadı:', err);
       });
-    } else {
-      startTimer();
     }
   </script>
 </body>
