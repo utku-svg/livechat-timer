@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>LiveChat Response Timer</title>
+  <!-- LiveChat Agent App SDK v2 -->
+  <script src="https://unpkg.com/@livechat/agent-app-sdk@2.3.0/dist/agent-app-sdk.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 16px;
+      margin: 0;
+      background: #fafafa;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e4e7eb;
+      border-radius: 8px;
+      padding: 14px;
+      text-align: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .timer-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #6d7986;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .timer-display {
+      font-size: 32px;
+      font-weight: 700;
+      color: #2b3a4a;
+      letter-spacing: 1px;
+    }
+    .status-ok { color: #108447; }
+    .status-warn { color: #d07000; }
+    .status-alert { color: #d62400; animation: blink 1s infinite alternate; }
+    @keyframes blink { from { opacity: 1; } to { opacity: 0.5; } }
+    .btn-reset {
+      margin-top: 10px;
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 4px;
+      border: none;
+      background: #4384f5;
+      color: white;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="timer-title">Son Müşteri Yanıtından Beri</div>
+    <div id="display" class="timer-display status-ok">00:00</div>
+    <button class="btn-reset" id="resetBtn">Sayacı Sıfırla (Cevaplandı)</button>
+  </div>
+
+  <script>
+    // === AYARLAR ===
+    const WARNING_SECONDS = 60;  // 1. dakika sarı uyarı
+    const ALERT_SECONDS = 120;   // 2. dakika sesli kırmızı alarm
+    const ALARM_SOUND = 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg';
+
+    const audio = new Audio(ALARM_SOUND);
+    let secondsElapsed = 0;
+    let timerInterval = null;
+    let currentChatId = null;
+
+    const display = document.getElementById('display');
+    const resetBtn = document.getElementById('resetBtn');
+
+    function formatTime(s) {
+      const min = Math.floor(s / 60).toString().padStart(2, '0');
+      const sec = (s % 60).toString().padStart(2, '0');
+      return `${min}:${sec}`;
+    }
+
+    function updateDisplay() {
+      display.textContent = formatTime(secondsElapsed);
+      if (secondsElapsed >= ALERT_SECONDS) {
+        display.className = 'timer-display status-alert';
+        // Her 20 saniyede bir sesi tekrar çal
+        if (secondsElapsed % 20 === 0) {
+          audio.play().catch(e => console.log('Audio engeli:', e));
+        }
+      } else if (secondsElapsed >= WARNING_SECONDS) {
+        display.className = 'timer-display status-warn';
+      } else {
+        display.className = 'timer-display status-ok';
+      }
+    }
+
+    function startTimer() {
+      stopTimer();
+      secondsElapsed = 0;
+      updateDisplay();
+      timerInterval = setInterval(() => {
+        secondsElapsed++;
+        updateDisplay();
+      }, 1000);
+    }
+
+    function stopTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+    }
+
+    resetBtn.addEventListener('click', () => {
+      startTimer();
+    });
+
+    // Sayfaya tıklandığında ses kilidini aç
+    document.addEventListener('click', () => audio.load(), { once: true });
+
+    // LiveChat SDK Başlatma
+    LiveChat.createDetailsWidget().then(widget => {
+      // Temsilci yeni bir sohbet sekmesine geçtiğinde tetiklenir
+      widget.on('customer_profile', data => {
+        if (data && data.chat && data.chat.id !== currentChatId) {
+          currentChatId = data.chat.id;
+          startTimer();
+        }
+      });
+    }).catch(err => {
+      // SDK dışında yerel tarayıcı testleri için fallback
+      console.log('SDK başlatılamadı veya panel dışında çalışıyor:', err);
+      startTimer();
+    });
+  </script>
+</body>
+</html>
